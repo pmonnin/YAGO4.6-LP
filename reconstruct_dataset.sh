@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Get info on SHACL shapes in YAGO4.5
+# Get info on SHACL shapes in YAGO4.6
 python src/get_shapes_info.py \
   --output data/shapes_info.csv
 
