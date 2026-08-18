@@ -26,7 +26,7 @@ def get_yago_endpoint(url: str | None = None) -> SPARQLWrapper.SPARQLWrapper:
     return yago_endpoint
 
 
-def compute_node_degree(node_uri: str) -> int:
+def compute_node_degree(node_uri: str, url: str | None = None) -> int:
     """
         Compute the total degree of a node in the YAGO knowledge graph.
 
@@ -40,11 +40,13 @@ def compute_node_degree(node_uri: str) -> int:
 
         :param node_uri: The URI of the node whose degree is to be computed.
         :type node_uri: str
+        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
+        :type url: str | None
         :return: The total degree of the node (number of incoming + outgoing edges).
         :rtype: int
         :raises SPARQLWrapper.SPARQLExceptions: If there is an error executing the SPARQL queries.
     """
-    endpoint = get_yago_endpoint()
+    endpoint = get_yago_endpoint(url)
 
     degree = 0
 
@@ -72,7 +74,7 @@ def compute_node_degree(node_uri: str) -> int:
     return degree
 
 
-def get_target_nodes(shape_uri: str) -> list[str]:
+def get_target_nodes(shape_uri: str, url: str | None = None) -> list[str]:
     """
         Retrieve all target nodes that are instances of a given SHACL shape in YAGO.
 
@@ -84,15 +86,19 @@ def get_target_nodes(shape_uri: str) -> list[str]:
 
         :param shape_uri: The URI of the SHACL shape for which target nodes are retrieved.
         :type shape_uri: str
+        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
+        :type url: str | None
         :return: A list of node URIs that are instances of the given shape.
         :rtype: list[str]
         :raises SPARQLWrapper.SPARQLExceptions: If the SPARQL query fails, or the endpoint is unreachable.
     """
 
-    yago_endpoint = get_yago_endpoint()
+    yago_endpoint = get_yago_endpoint(url)
     target_nodes = []
 
     yago_endpoint.setQuery(f"""
+        PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
         SELECT DISTINCT ?targetNode 
         WHERE
         {{
