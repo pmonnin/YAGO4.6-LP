@@ -1,24 +1,26 @@
 import SPARQLWrapper
 
-YAGO_ENDPOINT = "https://yago-knowledge.org/sparql/query"
+YAGO_ENDPOINT = "https://yago-knowledge.org/sparql/qlever"
 
-def get_yago_endpoint() -> SPARQLWrapper.SPARQLWrapper:
+def get_yago_endpoint(url: str | None = None) -> SPARQLWrapper.SPARQLWrapper:
     """
         Create and return a SPARQLWrapper endpoint configured for the YAGO knowledge graph.
 
         The returned endpoint is preconfigured with:
-        - the YAGO public SPARQL endpoint URL
+        - the given SPARQL endpoint URL, or the YAGO public SPARQL endpoint URL if none is given
         - JSON as the return format
 
         A new SPARQLWrapper instance is created on each call, making this function
         safe to use in multithreaded contexts (the endpoint object is not shared
         across threads).
 
+        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
+        :type url: str | None
         :return: A configured SPARQLWrapper instance ready for queries
         :rtype: SPARQLWrapper.SPARQLWrapper
     """
     yago_endpoint = SPARQLWrapper.SPARQLWrapper(
-        "https://yago-knowledge.org/sparql/query"
+        url if url is not None else YAGO_ENDPOINT
     )
     yago_endpoint.setReturnFormat(SPARQLWrapper.JSON)
     return yago_endpoint
@@ -31,7 +33,7 @@ def compute_node_degree(node_uri: str) -> int:
         This function counts both outgoing and incoming edges of the given node URI.
         Outgoing edges are triples where the node is the subject, and incoming edges
         are triples where the node is the object. Only edges pointing to or coming
-        from other URIs are counted.
+        from other URIs are counted, not literals.
 
         A new SPARQLWrapper endpoint is created for each call, making this function
         safe to use in multithreaded contexts.
