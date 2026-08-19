@@ -16,6 +16,8 @@ def main():
     parser.add_argument("--min-degree", dest="min_degree", help="Minimum degree of target nodes", type=int,
                         required=True)
     parser.add_argument("--output", dest="output", help="Output file to save seed nodes", required=True)
+    parser.add_argument("--yago-url", dest="yago_url", help="YAGO SPARQL endpoint URL", type=str,
+                        default=None)
     parser.add_argument("-l,--log-level", dest="log_level", help="Set the logging level", type=str,
                         default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
     args = parser.parse_args()
@@ -23,7 +25,7 @@ def main():
     logger = get_logger(args.log_level)
 
     logger.info("get_seed_nodes: start")
-    logger.info(f"SPARQL endpoint: {yago_utils.YAGO_ENDPOINT}")
+    logger.info(f"SPARQL endpoint: {args.yago_url if args.yago_url is not None else yago_utils.YAGO_ENDPOINT}")
     logger.info(f"Shape URI: {args.shape_uri}")
     logger.info(f"Seed nodes number: {args.seed_nodes_number}")
     logger.info(f"Minimum degree: {args.min_degree}")
@@ -34,7 +36,7 @@ def main():
     try:
         # Get all target nodes of the given shape
         logger.info("Getting target nodes...")
-        target_nodes = get_target_nodes(args.shape_uri)
+        target_nodes = get_target_nodes(args.shape_uri, args.yago_url)
         logger.info(f"Number of target nodes: {len(target_nodes)}")
 
         # Shuffle and take the first N seed nodes
@@ -42,7 +44,7 @@ def main():
         random.shuffle(target_nodes)
         while len(seed_nodes) < args.seed_nodes_number and target_nodes:
             n = target_nodes.pop()
-            degree = compute_node_degree(n)
+            degree = compute_node_degree(n, args.yago_url)
 
             if degree >= args.min_degree:
                 seed_nodes.append(n)
