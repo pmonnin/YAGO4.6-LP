@@ -121,3 +121,67 @@ def get_target_nodes(shape_uri: str, url: str | None = None) -> list[str]:
         target_nodes.append(r["targetNode"]["value"])
 
     return target_nodes
+
+
+def compute_target_nodes_degrees(shape_uri: str, url: str | None = None) -> dict[str, int]:
+    """
+        Compute the total degree of all target nodes of a given SHACL shape in YAGO.
+
+        Degrees follow the same definition as compute_node_degree, but are computed with
+        two aggregate queries (outgoing and incoming edges) for all target nodes at once.
+
+        A new SPARQLWrapper endpoint is created within the function to ensure thread safety.
+
+        :param shape_uri: The URI of the SHACL shape whose target nodes degrees are computed.
+        :type shape_uri: str
+        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
+        :type url: str | None
+        :return: A dictionary mapping each target node URI to its degree (0 for target nodes without counted edges).
+        :rtype: dict[str, int]
+        :raises SPARQLWrapper.SPARQLExceptions: If the SPARQL queries fail, or the endpoint is unreachable.
+    """
+    endpoint = get_yago_endpoint(url)
+    excluded_predicates = ", ".join(f"<{p}>" for p in DEGREE_EXCLUDED_PREDICATES)
+
+    degrees = {n: 0 for n in get_target_nodes(shape_uri, url)}
+
+    # Outgoing edges
+    endpoint.setQuery(f"""
+        PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?targetNode (COUNT(*) AS ?degree)
+        WHERE {{
+            SELECT DISTINCT ?targetNode ?p ?o
+            WHERE {{
+                ?targetNode rdf:type/rdfs:subClassOf* <{shape_uri}> .
+                ?targetNode ?p ?o .
+                FILTER(ISURI(?o)) .
+                FILTER(?p NOT IN ({excluded_predicates})) .
+            }}
+        }}
+        GROUP BY ?targetNode
+    """)
+    results = endpoint.queryAndConvert()
+    for r in results["results"]["bindings"]:
+        degrees[r["targetNode"]["value"]] += int(r["degree"]["value"])
+
+    # Incoming edges
+    endpoint.setQuery(f"""
+        PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?targetNode (COUNT(*) AS ?degree)
+        WHERE {{
+            SELECT DISTINCT ?targetNode ?s ?p
+            WHERE {{
+                ?targetNode rdf:type/rdfs:subClassOf* <{shape_uri}> .
+                ?s ?p ?targetNode .
+                FILTER(?p NOT IN ({excluded_predicates})) .
+            }}
+        }}
+        GROUP BY ?targetNode
+    """)
+    results = endpoint.queryAndConvert()
+    for r in results["results"]["bindings"]:
+        degrees[r["targetNode"]["value"]] += int(r["degree"]["value"])
+
+    return degrees

@@ -1,14 +1,11 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import argparse
 import matplotlib.pyplot
 import seaborn
 import sys
-import tqdm
 
 from utils import yago_utils
 from utils.logging_utils import get_logger
-from utils.yago_utils import compute_node_degree, get_target_nodes
+from utils.yago_utils import compute_target_nodes_degrees
 
 
 def main():
@@ -33,32 +30,19 @@ def main():
     logger.info(f"Output histogram: {args.output_hist}")
     logger.info(f"Output CCDF: {args.output_ccdf}")
 
-    target_node_degrees = []
-
     try:
-        logger.info("Getting target nodes...")
-        target_nodes = get_target_nodes(args.shape_uri, args.yago_url)
-        logger.info(f"Number of target nodes: {len(target_nodes)}")
-
-        logger.info("Computing node degrees (multithreaded)...")
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            futures = {
-                executor.submit(compute_node_degree, n, args.yago_url): n
-                for n in target_nodes
-            }
-
-            try:
-                for future in tqdm.tqdm(as_completed(futures), total=len(futures)):
-                    target_node_degrees.append(future.result())
-            except Exception:
-                # Cancel pending queries instead of waiting for them when leaving the executor
-                executor.shutdown(cancel_futures=True)
-                raise
+        logger.info("Computing target nodes degrees...")
+        degrees = compute_target_nodes_degrees(args.shape_uri, args.yago_url)
+        logger.info(f"Number of target nodes: {len(degrees)}")
 
     except Exception as e:
         # Do not plot partial degrees that would look like the full distribution
         logger.error(f"Querying YAGO failed, no output written: {e}")
         sys.exit(1)
+
+    # Degree 0 cannot be shown on log scales
+    target_node_degrees = [d for d in degrees.values() if d > 0]
+    logger.info(f"Number of target nodes with degree 0 (not plotted): {len(degrees) - len(target_node_degrees)}")
 
     seaborn.set_theme(
         style="whitegrid",
