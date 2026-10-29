@@ -5,7 +5,7 @@ import tqdm
 
 from utils import yago_utils
 from utils.logging_utils import get_logger
-from utils.yago_utils import get_yago_endpoint
+from utils.yago_utils import count_target_nodes, get_node_shapes
 
 
 def main():
@@ -23,42 +23,16 @@ def main():
     logger.info(f"SPARQL endpoint: {args.yago_url if args.yago_url is not None else yago_utils.YAGO_ENDPOINT}")
     logger.info(f"Output file: {args.output}")
 
-    yago_endpoint = get_yago_endpoint(args.yago_url)
-
     shapes = []
 
     try:
-        yago_endpoint.setQuery("""
-            PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            SELECT DISTINCT ?shape
-            WHERE
-            {
-                ?shape rdf:type <http://www.w3.org/ns/shacl#NodeShape> .
-            }
-            """)
-
-        results = yago_endpoint.queryAndConvert()
-
-        for r in results["results"]["bindings"]:
-            shapes.append([r["shape"]["value"], 0])
-
-        # Sort shapes so that the output order does not depend on the endpoint
-        shapes.sort()
+        logger.info("Getting node shapes...")
+        shapes = [[shape, 0] for shape in get_node_shapes(args.yago_url)]
         logger.info(f"Number of shapes: {len(shapes)}")
 
+        logger.info("Counting target nodes of each shape...")
         for s in tqdm.tqdm(shapes):
-            yago_endpoint.setQuery(f"""
-                PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
-                SELECT (COUNT(DISTINCT ?s) AS ?targetNodes) 
-                WHERE
-                {{
-                    ?s rdf:type/rdfs:subClassOf* <{s[0]}> .
-                }}
-            """)
-
-            results = yago_endpoint.queryAndConvert()
-            s[1] = results["results"]["bindings"][0]["targetNodes"]["value"]
+            s[1] = count_target_nodes(s[0], args.yago_url)
 
     except Exception as e:
         # Do not write partial results that would look like valid counts
