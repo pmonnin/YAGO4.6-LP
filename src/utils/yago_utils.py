@@ -2,6 +2,12 @@ import SPARQLWrapper
 
 YAGO_ENDPOINT = "https://yago-knowledge.org/sparql/qlever"
 
+# Predicates that are not relations between entities, and thus do not count in node degrees
+DEGREE_EXCLUDED_PREDICATES = [
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    "http://www.w3.org/2002/07/owl#sameAs",
+]
+
 def get_yago_endpoint(url: str | None = None) -> SPARQLWrapper.SPARQLWrapper:
     """
         Create and return a SPARQLWrapper endpoint configured for the YAGO knowledge graph.
@@ -33,7 +39,8 @@ def compute_node_degree(node_uri: str, url: str | None = None) -> int:
         This function counts both outgoing and incoming edges of the given node URI.
         Outgoing edges are triples where the node is the subject, and incoming edges
         are triples where the node is the object. Only edges pointing to or coming
-        from other URIs are counted, not literals.
+        from other URIs are counted, not literals. Edges whose predicate is in
+        DEGREE_EXCLUDED_PREDICATES (rdf:type, owl:sameAs) are not counted either.
 
         A new SPARQLWrapper endpoint is created for each call, making this function
         safe to use in multithreaded contexts.
@@ -47,6 +54,7 @@ def compute_node_degree(node_uri: str, url: str | None = None) -> int:
         :raises SPARQLWrapper.SPARQLExceptions: If there is an error executing the SPARQL queries.
     """
     endpoint = get_yago_endpoint(url)
+    excluded_predicates = ", ".join(f"<{p}>" for p in DEGREE_EXCLUDED_PREDICATES)
 
     degree = 0
 
@@ -56,6 +64,7 @@ def compute_node_degree(node_uri: str, url: str | None = None) -> int:
         WHERE {{
             <{node_uri}> ?p ?o .
             FILTER(ISURI(?o)) .
+            FILTER(?p NOT IN ({excluded_predicates})) .
         }}
     """)
     results = endpoint.queryAndConvert()
@@ -66,6 +75,7 @@ def compute_node_degree(node_uri: str, url: str | None = None) -> int:
         SELECT DISTINCT ?s ?p
         WHERE {{
             ?s ?p <{node_uri}> .
+            FILTER(?p NOT IN ({excluded_predicates})) .
         }}
     """)
     results = endpoint.queryAndConvert()
