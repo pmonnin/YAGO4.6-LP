@@ -7,32 +7,27 @@ THING = rdflib.URIRef("http://schema.org/Thing")
 
 def load_schema(schema_path: str) -> rdflib.Graph:
     """
-        Load the YAGO schema (node shapes, property shapes and their class hierarchy).
+    Load the YAGO schema (node shapes, property shapes and their class hierarchy).
 
-        The schema is read from a local file rather than from the YAGO SPARQL endpoint,
-        because the blank nodes of the sh:or lists are not preserved on the endpoint.
+    The schema is read from a local file rather than from the YAGO SPARQL endpoint,
+    because the blank nodes of the sh:or lists are not preserved on the endpoint.
 
-        :param schema_path: Path to the YAGO schema file in Turtle format.
-        :type schema_path: str
-        :return: The schema graph.
-        :rtype: rdflib.Graph
+    :param schema_path: Path to the YAGO schema file in Turtle format.
+    :return: The schema graph.
     """
     return rdflib.Graph().parse(schema_path, format="turtle")
 
 
 def get_property_ranges(schema: rdflib.Graph, property_shape: rdflib.term.Node) -> set[rdflib.URIRef]:
     """
-        Return the classes allowed as values of a property shape.
+    Return the classes allowed as values of a property shape.
 
-        Classes are given either directly by sh:class, or by the sh:class of the
-        alternatives of an sh:or list. Datatype properties have no range class.
+    Classes are given either directly by sh:class, or by the sh:class of the
+    alternatives of an sh:or list. Datatype properties have no range class.
 
-        :param schema: The schema graph.
-        :type schema: rdflib.Graph
-        :param property_shape: The property shape.
-        :type property_shape: rdflib.term.Node
-        :return: The set of range classes (empty for datatype properties).
-        :rtype: set[rdflib.URIRef]
+    :param schema: The schema graph.
+    :param property_shape: The property shape.
+    :return: The set of range classes (empty for datatype properties).
     """
     ranges = set(schema.objects(property_shape, SH["class"]))
 
@@ -45,14 +40,11 @@ def get_property_ranges(schema: rdflib.Graph, property_shape: rdflib.term.Node) 
 
 def get_superclasses(schema: rdflib.Graph, shape: rdflib.URIRef) -> set[rdflib.URIRef]:
     """
-        Return the direct and indirect superclasses of a shape in the schema.
+    Return the direct and indirect superclasses of a shape in the schema.
 
-        :param schema: The schema graph.
-        :type schema: rdflib.Graph
-        :param shape: The shape (also a class in YAGO).
-        :type shape: rdflib.URIRef
-        :return: The set of direct and indirect superclasses, without the shape itself.
-        :rtype: set[rdflib.URIRef]
+    :param schema: The schema graph.
+    :param shape: The shape (also a class in YAGO).
+    :return: The set of direct and indirect superclasses, without the shape itself.
     """
     superclasses = set()
     to_visit = [shape]
@@ -68,30 +60,28 @@ def get_superclasses(schema: rdflib.Graph, shape: rdflib.URIRef) -> set[rdflib.U
 
 def get_declared_links(schema: rdflib.Graph) -> dict[str, dict[str, int]]:
     """
-        Compute, for each node shape, the links to other shapes declared in the schema.
+    Compute, for each node shape, the links to other shapes declared in the schema.
 
-        Object properties of a shape are its property shapes with range classes, declared
-        on the shape or inherited from its superclasses. The properties of schema:Thing
-        (e.g. yago:follows, yago:partOf) are inherited by every shape and do not
-        characterize any of them, so they are left out.
+    Object properties of a shape are its property shapes with range classes, declared
+    on the shape or inherited from its superclasses. The properties of schema:Thing
+    (e.g. yago:follows, yago:partOf) are inherited by every shape and do not
+    characterize any of them, so they are left out.
 
-        For a shape S:
-        - "object_properties" is the number of distinct paths of its object properties
-        - "linked_to_shapes" is the number of distinct shapes, other than S and schema:Thing,
-          found in the ranges of its object properties
-        - "linked_from_shapes_strict" is the number of distinct other shapes having an object
-          property whose range necessarily contains instances of S: S itself or one of its
-          subclasses
-        - "linked_from_shapes_possible" is the number of distinct other shapes having an object
-          property whose range may contain instances of S: S itself, one of its subclasses, or
-          one of its superclasses other than schema:Thing. Such links are allowed but not
-          required, so this is an upper bound. YAGO mostly declares ranges on broad classes
-          (e.g. schema:Organization), so the strict count is 0 for many specific shapes
+    For a shape S:
+    - "object_properties" is the number of distinct paths of its object properties
+    - "linked_to_shapes" is the number of distinct shapes, other than S and schema:Thing,
+      found in the ranges of its object properties
+    - "linked_from_shapes_strict" is the number of distinct other shapes having an object
+      property whose range necessarily contains instances of S: S itself or one of its
+      subclasses
+    - "linked_from_shapes_possible" is the number of distinct other shapes having an object
+      property whose range may contain instances of S: S itself, one of its subclasses, or
+      one of its superclasses other than schema:Thing. Such links are allowed but not
+      required, so this is an upper bound. YAGO mostly declares ranges on broad classes
+      (e.g. schema:Organization), so the strict count is 0 for many specific shapes
 
-        :param schema: The schema graph.
-        :type schema: rdflib.Graph
-        :return: A dictionary mapping each node shape URI to its declared link counts.
-        :rtype: dict[str, dict[str, int]]
+    :param schema: The schema graph.
+    :return: A dictionary mapping each node shape URI to its declared link counts.
     """
     shapes = set(schema.subjects(RDF.type, SH.NodeShape))
     superclasses = {s: get_superclasses(schema, s) - {THING} for s in shapes}
