@@ -114,6 +114,58 @@ def count_target_nodes(shape_uri: str, url: str | None = None) -> int:
     return int(results["results"]["bindings"][0]["targetNodes"]["value"])
 
 
+def get_random_target_nodes(shape_uri: str, sample_size: int, url: str | None = None) -> list[str]:
+    """
+        Retrieve a uniform random sample of the target nodes of a given SHACL shape in YAGO.
+
+        Sampling is done by the endpoint with ORDER BY RAND(), which cannot be seeded: each
+        call returns a different sample, so samples must be saved to be reused. Seeded
+        alternatives (e.g. ordering by a hash of the node URIs) exceed the query time limit
+        of the public YAGO endpoint for shapes with millions of target nodes.
+
+        Target nodes are deduplicated in a subquery before being ordered randomly. The target
+        nodes pattern returns one solution per type of a node leading to the shape (e.g. about
+        10% of the instances of schema:Event have several types). In a flat query, ORDER BY is
+        applied before DISTINCT, so a node with k such types would get k random keys and be
+        kept if the smallest of them is among the first ones: nodes with more types would be
+        more likely to be sampled. The subquery gives each node exactly one random key, so that
+        all target nodes have the same probability to be sampled.
+
+        A new SPARQLWrapper endpoint is created within the function to ensure thread safety.
+
+        :param shape_uri: The URI of the SHACL shape whose target nodes are sampled.
+        :type shape_uri: str
+        :param sample_size: Number of target nodes to sample (all target nodes if the shape has fewer).
+        :type sample_size: int
+        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
+        :type url: str | None
+        :return: The sorted list of sampled target node URIs.
+        :rtype: list[str]
+        :raises SPARQLWrapper.SPARQLExceptions: If the SPARQL query fails, or the endpoint is unreachable.
+    """
+    yago_endpoint = get_yago_endpoint(url)
+
+    yago_endpoint.setQuery(f"""
+        {SPARQL_PREFIXES}
+        SELECT ?targetNode
+        WHERE
+        {{
+            {{
+                SELECT DISTINCT ?targetNode
+                WHERE
+                {{
+                    {target_nodes_pattern("?targetNode", shape_uri)}
+                }}
+            }}
+        }}
+        ORDER BY RAND()
+        LIMIT {sample_size}
+    """)
+
+    results = yago_endpoint.queryAndConvert()
+    return sorted(r["targetNode"]["value"] for r in results["results"]["bindings"])
+
+
 def get_target_nodes(shape_uri: str, url: str | None = None) -> list[str]:
     """
         Retrieve all target nodes that are instances of a given SHACL shape in YAGO.
@@ -218,3 +270,70 @@ def compute_target_nodes_degrees(shape_uri: str, url: str | None = None) -> dict
         degrees[r["targetNode"]["value"]] += int(r["degree"]["value"])
 
     return degrees
+
+
+def get_nodes_predicates_edges(nodes: list[str], url: str | None = None,
+                               batch_size: int = 100) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
+    """
+        Count the outgoing and incoming edges of the given nodes in YAGO, per predicate.
+
+        Edges follow the same definition as in compute_target_nodes_degrees: outgoing edges
+        are distinct (predicate, object) pairs with an URI object, incoming edges are distinct
+        (subject, predicate) pairs, and predicates in DEGREE_EXCLUDED_PREDICATES are not counted.
+        Summing the counts of a node over its predicates thus gives its degree.
+
+        Nodes are queried by batches (VALUES clause sent with POST) to keep queries small.
+
+        A new SPARQLWrapper endpoint is created within the function to ensure thread safety.
+
+        :param nodes: The URIs of the nodes.
+        :type nodes: list[str]
+        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
+        :type url: str | None
+        :param batch_size: Number of nodes per query.
+        :type batch_size: int
+        :return: Two dictionaries (outgoing, incoming) mapping each node URI to a dictionary from
+            predicate URIs to edge counts. Nodes without edges map to an empty dictionary.
+        :rtype: tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]
+        :raises SPARQLWrapper.SPARQLExceptions: If the SPARQL queries fail, or the endpoint is unreachable.
+    """
+    endpoint = get_yago_endpoint(url)
+    endpoint.setMethod(SPARQLWrapper.POST)
+    excluded_predicates = ", ".join(f"<{p}>" for p in DEGREE_EXCLUDED_PREDICATES)
+
+    outgoing = {n: {} for n in nodes}
+    incoming = {n: {} for n in nodes}
+
+    for i in range(0, len(nodes), batch_size):
+        values = " ".join(f"<{n}>" for n in nodes[i:i + batch_size])
+
+        # Outgoing edges
+        endpoint.setQuery(f"""
+            SELECT ?node ?p (COUNT(DISTINCT ?o) AS ?edges)
+            WHERE {{
+                VALUES ?node {{ {values} }}
+                ?node ?p ?o .
+                FILTER(ISURI(?o)) .
+                FILTER(?p NOT IN ({excluded_predicates})) .
+            }}
+            GROUP BY ?node ?p
+        """)
+        results = endpoint.queryAndConvert()
+        for r in results["results"]["bindings"]:
+            outgoing[r["node"]["value"]][r["p"]["value"]] = int(r["edges"]["value"])
+
+        # Incoming edges
+        endpoint.setQuery(f"""
+            SELECT ?node ?p (COUNT(DISTINCT ?s) AS ?edges)
+            WHERE {{
+                VALUES ?node {{ {values} }}
+                ?s ?p ?node .
+                FILTER(?p NOT IN ({excluded_predicates})) .
+            }}
+            GROUP BY ?node ?p
+        """)
+        results = endpoint.queryAndConvert()
+        for r in results["results"]["bindings"]:
+            incoming[r["node"]["value"]][r["p"]["value"]] = int(r["edges"]["value"])
+
+    return outgoing, incoming
