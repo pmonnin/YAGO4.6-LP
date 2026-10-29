@@ -7,7 +7,7 @@ import tqdm
 
 from utils import yago_utils
 from utils.logging_utils import get_logger
-from utils.yago_utils import get_yago_endpoint, compute_node_degree, get_target_nodes
+from utils.yago_utils import compute_node_degree, get_target_nodes
 
 
 def main():
@@ -16,11 +16,11 @@ def main():
     parser.add_argument("--shape-uri", dest="shape_uri", help="Shape URI", required=True)
     parser.add_argument("--yago-url", dest="yago_url", help="YAGO SPARQL endpoint URL", type=str,
                         default=None)
-    parser.add_argument("-l,--log-level", dest="log_level", help="Set the logging level", type=str,
+    parser.add_argument("-l", "--log-level", dest="log_level", help="Set the logging level", type=str,
                         default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
     parser.add_argument("--output-hist", dest="output_hist", help="Output file for histogram plot",
                         required=True)
-    parser.add_argument("--output-ecdf", dest="output_ecdf", help="Output file for ECDF plot",
+    parser.add_argument("--output-ccdf", dest="output_ccdf", help="Output file for CCDF plot",
                         required=True)
     args = parser.parse_args()
 
@@ -30,9 +30,7 @@ def main():
     logger.info(f"SPARQL endpoint: {args.yago_url if args.yago_url is not None else yago_utils.YAGO_ENDPOINT}")
     logger.info(f"Shape URI: {args.shape_uri}")
     logger.info(f"Output histogram: {args.output_hist}")
-    logger.info(f"Output ECDF: {args.output_ecdf}")
-
-    yago_endpoint = get_yago_endpoint(args.yago_url)
+    logger.info(f"Output CCDF: {args.output_ccdf}")
 
     target_node_degrees = []
 
@@ -76,11 +74,10 @@ def main():
     matplotlib.pyplot.ylabel("Count")
     matplotlib.pyplot.title("Distribution of Node Degrees (log scale)")
 
-    matplotlib.pyplot.tight_layout()
     matplotlib.pyplot.savefig(args.output_hist, format="pdf")
     matplotlib.pyplot.close()
 
-    # ECDF
+    # CCDF
     matplotlib.pyplot.figure(figsize=(9, 5), layout="constrained")
 
     seaborn.ecdfplot(
@@ -93,8 +90,7 @@ def main():
     matplotlib.pyplot.ylabel("P(Degree ≥ x) (log scale)")
     matplotlib.pyplot.title("CCDF of Node Degrees (log scale)")
 
-    matplotlib.pyplot.tight_layout()
-    matplotlib.pyplot.savefig(args.output_ecdf, format="pdf")
+    matplotlib.pyplot.savefig(args.output_ccdf, format="pdf")
     matplotlib.pyplot.close()
 
     logger.info("get_target_nodes_degree_distribution: done")
