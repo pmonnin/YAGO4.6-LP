@@ -1,5 +1,6 @@
 import argparse
 import csv
+import sys
 import tqdm
 
 from utils import yago_utils
@@ -12,7 +13,7 @@ def main():
     parser.add_argument("--output", dest="output", help="Output file", required=True)
     parser.add_argument("--yago-url", dest="yago_url", help="YAGO SPARQL endpoint URL", type=str,
                         default=None)
-    parser.add_argument("-l,--log-level", dest="log_level", help="Set the logging level", type=str,
+    parser.add_argument("-l", "--log-level", dest="log_level", help="Set the logging level", type=str,
                         default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
     args = parser.parse_args()
 
@@ -41,6 +42,8 @@ def main():
         for r in results["results"]["bindings"]:
             shapes.append([r["shape"]["value"], 0])
 
+        # Sort shapes so that the output order does not depend on the endpoint
+        shapes.sort()
         logger.info(f"Number of shapes: {len(shapes)}")
 
         for s in tqdm.tqdm(shapes):
@@ -58,9 +61,11 @@ def main():
             s[1] = results["results"]["bindings"][0]["targetNodes"]["value"]
 
     except Exception as e:
-        print(e)
+        # Do not write partial results that would look like valid counts
+        logger.error(f"Querying YAGO failed, no output written: {e}")
+        sys.exit(1)
 
-    with open(args.output, 'w') as csvfile:
+    with open(args.output, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile, delimiter=',')
         csvwriter.writerow(["Shape", "# target nodes"])
         csvwriter.writerows(shapes)
