@@ -1,5 +1,6 @@
 import argparse
 import matplotlib.pyplot
+import pickle
 import seaborn
 import sys
 
@@ -9,8 +10,9 @@ from utils.yago_utils import compute_target_nodes_degrees
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="get_target_nodes_degree_distribution",
-                                     description="Get the degree distribution of target nodes based on the provided shape")
+    parser = argparse.ArgumentParser(prog="get_target_nodes_degrees",
+                                     description="Get the degrees of the target nodes of the provided "
+                                                 "shape and plot their distribution")
     parser.add_argument("--shape-uri", dest="shape_uri", help="Shape URI", required=True)
     parser.add_argument("--yago-url", dest="yago_url", help="YAGO SPARQL endpoint URL", type=str,
                         default=None)
@@ -20,15 +22,18 @@ def main():
                         required=True)
     parser.add_argument("--output-ccdf", dest="output_ccdf", help="Output file for CCDF plot",
                         required=True)
+    parser.add_argument("--output-degrees", dest="output_degrees", help="Output file to save the degree of each "
+                                                                        "target node", required=True)
     args = parser.parse_args()
 
     logger = get_logger(args.log_level)
 
-    logger.info("get_target_nodes_degree_distribution: start")
+    logger.info("get_target_nodes_degrees: start")
     logger.info(f"SPARQL endpoint: {args.yago_url if args.yago_url is not None else yago_utils.YAGO_ENDPOINT}")
     logger.info(f"Shape URI: {args.shape_uri}")
     logger.info(f"Output histogram: {args.output_hist}")
     logger.info(f"Output CCDF: {args.output_ccdf}")
+    logger.info(f"Output degrees: {args.output_degrees}")
 
     try:
         logger.info("Computing target nodes degrees...")
@@ -39,6 +44,11 @@ def main():
         # Do not plot partial degrees that would look like the full distribution
         logger.error(f"Querying YAGO failed, no output written: {e}")
         sys.exit(1)
+
+    # Save degrees so that seed nodes can be sampled without querying YAGO again
+    logger.info("Saving target nodes degrees...")
+    with open(args.output_degrees, 'wb') as f:
+        pickle.dump(degrees, f)
 
     # Degree 0 cannot be shown on log scales
     target_node_degrees = [d for d in degrees.values() if d > 0]
@@ -85,7 +95,7 @@ def main():
     matplotlib.pyplot.savefig(args.output_ccdf, format="pdf")
     matplotlib.pyplot.close()
 
-    logger.info("get_target_nodes_degree_distribution: done")
+    logger.info("get_target_nodes_degrees: done")
 
 
 if __name__ == '__main__':

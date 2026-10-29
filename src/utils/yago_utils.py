@@ -32,58 +32,6 @@ def get_yago_endpoint(url: str | None = None) -> SPARQLWrapper.SPARQLWrapper:
     return yago_endpoint
 
 
-def compute_node_degree(node_uri: str, url: str | None = None) -> int:
-    """
-        Compute the total degree of a node in the YAGO knowledge graph.
-
-        This function counts both outgoing and incoming edges of the given node URI.
-        Outgoing edges are triples where the node is the subject, and incoming edges
-        are triples where the node is the object. Only edges pointing to or coming
-        from other URIs are counted, not literals. Edges whose predicate is in
-        DEGREE_EXCLUDED_PREDICATES (rdf:type, owl:sameAs) are not counted either.
-
-        A new SPARQLWrapper endpoint is created for each call, making this function
-        safe to use in multithreaded contexts.
-
-        :param node_uri: The URI of the node whose degree is to be computed.
-        :type node_uri: str
-        :param url: SPARQL endpoint URL to use. Defaults to the YAGO public SPARQL endpoint if None.
-        :type url: str | None
-        :return: The total degree of the node (number of incoming + outgoing edges).
-        :rtype: int
-        :raises SPARQLWrapper.SPARQLExceptions: If there is an error executing the SPARQL queries.
-    """
-    endpoint = get_yago_endpoint(url)
-    excluded_predicates = ", ".join(f"<{p}>" for p in DEGREE_EXCLUDED_PREDICATES)
-
-    degree = 0
-
-    # Outgoing edges
-    endpoint.setQuery(f"""
-        SELECT DISTINCT ?p ?o
-        WHERE {{
-            <{node_uri}> ?p ?o .
-            FILTER(ISURI(?o)) .
-            FILTER(?p NOT IN ({excluded_predicates})) .
-        }}
-    """)
-    results = endpoint.queryAndConvert()
-    degree += len(results["results"]["bindings"])
-
-    # Incoming edges
-    endpoint.setQuery(f"""
-        SELECT DISTINCT ?s ?p
-        WHERE {{
-            ?s ?p <{node_uri}> .
-            FILTER(?p NOT IN ({excluded_predicates})) .
-        }}
-    """)
-    results = endpoint.queryAndConvert()
-    degree += len(results["results"]["bindings"])
-
-    return degree
-
-
 def get_target_nodes(shape_uri: str, url: str | None = None) -> list[str]:
     """
         Retrieve all target nodes that are instances of a given SHACL shape in YAGO.
@@ -127,8 +75,14 @@ def compute_target_nodes_degrees(shape_uri: str, url: str | None = None) -> dict
     """
         Compute the total degree of all target nodes of a given SHACL shape in YAGO.
 
-        Degrees follow the same definition as compute_node_degree, but are computed with
-        two aggregate queries (outgoing and incoming edges) for all target nodes at once.
+        The degree of a node counts both its outgoing and incoming edges. Outgoing edges
+        are triples where the node is the subject, and incoming edges are triples where
+        the node is the object. Only edges pointing to or coming from other URIs are
+        counted, not literals. Edges whose predicate is in DEGREE_EXCLUDED_PREDICATES
+        (rdf:type, owl:sameAs) are not counted either.
+
+        Degrees are computed with two aggregate queries (outgoing and incoming edges)
+        for all target nodes at once.
 
         A new SPARQLWrapper endpoint is created within the function to ensure thread safety.
 
