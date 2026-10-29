@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
 import matplotlib.pyplot
 import seaborn
+import sys
 import tqdm
 
 from utils import yago_utils
@@ -46,11 +47,18 @@ def main():
                 for n in target_nodes
             }
 
-            for future in tqdm.tqdm(as_completed(futures), total=len(futures)):
-                target_node_degrees.append(future.result())
+            try:
+                for future in tqdm.tqdm(as_completed(futures), total=len(futures)):
+                    target_node_degrees.append(future.result())
+            except Exception:
+                # Cancel pending queries instead of waiting for them when leaving the executor
+                executor.shutdown(cancel_futures=True)
+                raise
 
     except Exception as e:
-        print(e)
+        # Do not plot partial degrees that would look like the full distribution
+        logger.error(f"Querying YAGO failed, no output written: {e}")
+        sys.exit(1)
 
     seaborn.set_theme(
         style="whitegrid",
